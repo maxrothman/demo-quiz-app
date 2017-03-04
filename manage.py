@@ -1,8 +1,13 @@
-from flask.ext.script import Manager
+#!/usr/bin/env python
+
+from flask_script import Manager
 from main import app, db, parse_data, QuestionModel, json2db
 
 manager = Manager(app)
-manager.add_command('init_db', db.create_all)
+
+@manager.command
+def init_db():
+  db.create_all()
 
 @manager.command
 def import_data(data_file):
@@ -15,3 +20,6 @@ def import_data(data_file):
       counter += 1
 
   print('{} committed'.format(counter))
+
+if __name__ == '__main__':
+  manager.run()
