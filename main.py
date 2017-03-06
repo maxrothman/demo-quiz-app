@@ -1,5 +1,5 @@
-from flask import Flask, request
-from flask_restful import Api, Resource, abort, reqparse
+from flask import Flask
+from flask_restful import Api, Resource, reqparse, abort
 from flask_sqlalchemy import SQLAlchemy
 import csv
 import os.path
@@ -21,7 +21,7 @@ def parse_data(data):
 
   Args:
     data (iterable): data to parse
-  Yields: #TODO
+  Yields: dict of the form {'question': str, 'answer': str, 'distractors': list}
   """
   DATA_HEADERS = ['question', 'answer', 'distractors']
   reader = csv.DictReader(data, delimiter='|')
@@ -48,11 +48,11 @@ def db2json(question):
 
 
 ########################## API RESOURCES ##########################
-req_parser = reqparse.RequestParser()
-req_parser.add_argument('id',          type=int,  location='json')
-req_parser.add_argument('question',    type=str,  location='json')
-req_parser.add_argument('answer',      type=str,  location='json')
-req_parser.add_argument('distractors', type=list, location='json')
+json_parser = reqparse.RequestParser(bundle_errors=True)
+json_parser.add_argument('id',          type=int,  location='json', required=True)
+json_parser.add_argument('question',    type=str,  location='json', required=True)
+json_parser.add_argument('answer',      type=str,  location='json', required=True)
+json_parser.add_argument('distractors', type=list, location='json', required=True)
 
 
 class QuestionApi(Resource):
@@ -61,7 +61,7 @@ class QuestionApi(Resource):
     return db2json(question)
 
   def put(self, question_id):
-    args = req_parser.parse_args(strict=True)
+    args = json_parser.parse_args(strict=True)
     QuestionModel.query.get_or_404(question_id)
     QuestionModel.query.filter(QuestionModel.id == question_id).update(json2db(args))
     db.session.commit()
@@ -69,13 +69,51 @@ class QuestionApi(Resource):
     return db2json(QuestionModel.query.get(question_id))
 
 
+QUESTIONS_PER_PAGE = 10
+qlist_parser = reqparse.RequestParser(bundle_errors=True)
+qlist_parser.add_argument('page', type=int, location='args')
+qlist_parser.add_argument('sort', type=str, location='args',
+  choices=[mod+field for mod in ('', '-') for field in ('id', 'question', 'answer', 'distractors')])
+
+#Duplicated because you shouldn't send id with post
+#TODO: deduplicate
+post_parser = reqparse.RequestParser(bundle_errors=True)
+post_parser.add_argument('question',    type=str,  location='json', required=True)
+post_parser.add_argument('answer',      type=str,  location='json', required=True)
+post_parser.add_argument('distractors', type=list, location='json', required=True)
+
 class QuestionListApi(Resource):
   def get(self):
-    #TODO
-    pass
+    print('started')
+    args = qlist_parser.parse_args(strict=True)
+    if args['page'] is not None and args['page'] < 1:
+      abort(400, message='"page" query param must be >= 1')
+
+    q = QuestionModel.query
+    if args['sort']:
+      if args['sort'].startswith('-'):
+        q = q.order_by(getattr(QuestionModel, args['sort'][1:]).desc())
+      else:
+        q = q.order_by(getattr(QuestionModel, args['sort']))
+
+    p = q.paginate(args['page'] if args['page'] is not None else 1, QUESTIONS_PER_PAGE, False)
+    if args['sort']:
+      next_page = api.url_for(QuestionListApi, sort=args['sort'], page=p.next_num) if p.has_next else None
+      prev_page = api.url_for(QuestionListApi, sort=args['sort'], page=p.prev_num) if p.has_prev else None
+    else:
+      next_page = api.url_for(QuestionListApi, page=p.next_num) if p.has_next else None
+      prev_page = api.url_for(QuestionListApi, page=p.prev_num) if p.has_prev else None
+
+    return {
+      'meta': {
+        'next_page': next_page,
+        'prev_page': prev_page,
+      },
+      'questions': [db2json(i) for i in p.items],
+    }
 
   def post(self):
-    args = req_parser.parse_args()
+    args = post_parser.parse_args(strict=True)
     question = QuestionModel(**json2db(args))
     db.session.add(question)
     db.session.commit()
@@ -92,7 +130,3 @@ class QuestionModel(db.Model):
   question    = db.Column(db.String(255), unique=True)
   answer      = db.Column(db.String(255))
   distractors = db.Column(db.String(255))
-
-  def get_page(self, page):
-    #TODO
-    pass

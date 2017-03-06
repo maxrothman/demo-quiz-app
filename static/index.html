@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Quiz App</title>
+  <script src="/static/main.js"></script>
+</head>
+<body>
+
+<template id="question_template">
+  <p class="question_text"></p>
+  <div class="question_form">
+    <div class="answers_list"></div>
+    <button class="question_submit" type="button" onclick="javascript:check_answer(this)">
+      Check answer
+    </button>
+    <div class="question_check_answer_response"></div>
+  </div>
+</template>
+
+<template id="answer_choice_template">
+  <div class="answer_choice_container">
+    <label>
+      <span class="answer_choice_label"></span>
+      <input type="radio" name="answer_choice_radio" class="answer_choice_radio" value="">
+    </label>
+  </div>
+</template>
+
+<h1>Yay Quizzes!</h1>
+
+<button class="prev_page" type="button" onclick="javascript:prev_page()">Previous page</button>
+<button class="prev_page" type="button" onclick="javascript:next_page()">Next page</button>
+
+<div id="question_list"></div>
+</body>
+</html>
